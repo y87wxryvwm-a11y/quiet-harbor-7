@@ -1,8 +1,8 @@
 """
 Summarize a dataset: for each column, its type, how many values are filled
-or blank, how many are distinct, and one example value.
+or blank (and the percent blank), how many are distinct, and one example value.
 
-Put one .csv file in input/, then run with F5.
+Put one .csv file in input/, then run this file.
 
 Creates:
   output/summary.csv   one row per column of your file, with the counts above
@@ -25,6 +25,7 @@ for col in df.columns:
         "type": "number" if len(filled) and is_number else "text",
         "filled": len(filled),
         "blank": len(df) - len(filled),
+        "pct_blank": round(100 * (len(df) - len(filled)) / len(df), 1),
         "distinct": filled.nunique(),
         "example": filled.iloc[0] if len(filled) else "",
     })
