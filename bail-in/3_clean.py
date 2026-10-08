@@ -7,7 +7,9 @@ Cleaning steps, in order:
      in through subsidiaries abroad).
   2. Drop bonds with nothing outstanding (Amt Out zero or blank).
   3. Drop bonds whose maturity date has already passed.
-  4. Count each 144A / Reg S pair once. The same deal is often listed twice,
+  4. Drop lines with no ISIN that repeat another line of the same bond
+     (same parent, coupon, maturity, currency and amount, with an ISIN).
+  5. Count each 144A / Reg S pair once. The same deal is often listed twice,
      once for US buyers (144A) and once for buyers abroad (Reg S), and both
      lines carry the full amount. Lines with the same parent, coupon,
      maturity, currency and amount are merged when one is 144A or Reg S, or
@@ -19,8 +21,11 @@ Added columns:
   Type              AT1 (junior, incl. CoCos), Tier 2 (subordinated), Senior
   Perpetual         Yes if the bond has no maturity date
   Years to maturity from today; blank for perpetuals
-  US market         Yes if sold into the US market: ISIN starts with US, or
-                    Series is 144A (also Yes if a merged twin line was)
+  US market         Yes if sold into the US market: Series is 144A, or the
+                    ISIN is US + a digit (a US CUSIP) and Series isn't Reg S.
+                    US + a letter is a foreign-style code often used for
+                    Reg S lines, so it alone doesn't count. A merged pair is
+                    Yes if any of its lines is.
   Series clean      Series in capitals, #N/A as blank
   Currency group    USD, EUR, GBP, CAD, JPY, AUD, CHF or Other
   Lines merged      how many Bloomberg lines this row stands for (usually 1)
@@ -90,20 +95,32 @@ step("Keep the 16 G-SIB groups", match.notna())
 step("Drop: nothing outstanding", df["Amt Out"] > 0)
 step("Drop: already matured", ~(df["Maturity"] < pd.Timestamp(date.today())))
 
-# %% 4. 144A / Reg S pairs
+# %% 4. Lines without an ISIN that repeat a bond
+terms = ["Ultimate Parent", "Coupon", "Maturity", "Currency", "Amt Out"]
+
+
+def same_terms():
+    """Group lines with the same parent, coupon, maturity, currency, amount."""
+    return df.fillna({"Maturity": pd.Timestamp("2200-01-01")}).groupby(terms, dropna=False)
+
+
+has_isin = df["ISIN"].str.len() == 12
+repeats = same_terms()["ISIN"].transform(lambda s: (s.str.len() == 12).any())
+step("Drop: no-ISIN line repeating a bond", has_isin | ~repeats)
+
+# %% 5. 144A / Reg S pairs
 df["Series clean"] = df["Series"].str.upper().str.replace(" ", "").replace({NA.upper().replace(" ", ""): ""})
 df["US ISIN"] = df["ISIN"].str.startswith("US")
-terms = ["Ultimate Parent", "Coupon", "Maturity", "Currency", "Amt Out"]
-group = df.fillna({"Maturity": pd.Timestamp("2200-01-01")}).groupby(terms, dropna=False)
+group = same_terms()
 df["Lines merged"] = group["ISIN"].transform("size")
 pair = (
     group["Series clean"].transform(lambda s: s.isin(["144A", "REGS"]).any())
     | (group["US ISIN"].transform("any") & ~group["US ISIN"].transform("all"))
 )
-df["US market"] = df["US ISIN"] | (df["Series clean"] == "144A")
-df["US market"] = df["US market"] | (pair & group["US ISIN"].transform("any")) | (
-    pair & group["Series clean"].transform(lambda s: (s == "144A").any())
+df["US market"] = (df["Series clean"] == "144A") | (
+    df["ISIN"].str.match(r"US\d") & (df["Series clean"] != "REGS")
 )
+df["US market"] = df["US market"] | (pair & same_terms()["US market"].transform("any"))
 df["Twin"] = (df["Lines merged"] > 1) & pair
 df["Group id"] = group.ngroup()
 
@@ -138,7 +155,7 @@ kept = (
     .sort_values("Amt Out ($m)", ascending=False)
 )
 # Keep one line per pair, preferring the US one; other lines stand for themselves.
-df = df.sort_values("US ISIN", ascending=False)
+df = df.sort_values("US market", ascending=False)
 step("Count each 144A / Reg S pair once", ~(df["Twin"] & df.duplicated("Group id")))
 df.loc[~df["Twin"], "Lines merged"] = 1
 
@@ -175,7 +192,8 @@ save_output(
             "Parents dropped in step 1: "
             + ", ".join(f"{p} ({n})" for p, n in dropped_parents.items()),
         ],
-        "Merged": [f"144A / Reg S pairs counted once: {len(merged)} pairs, largest 30 shown"],
+        "Merged": [f"144A / Reg S pairs counted once: {len(merged)} deals, "
+                   f"{int(merged['Lines'].sum()) - len(merged)} lines removed; largest 30 shown"],
         "Kept": [
             f"Same parent, coupon, maturity, currency and amount, but NOT merged: {len(kept)} groups, largest 30",
             "No 144A / Reg S sign. Likely separate notes with equal terms; check the biggest.",
