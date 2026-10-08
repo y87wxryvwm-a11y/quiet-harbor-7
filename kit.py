@@ -11,7 +11,10 @@ them, so pulling new code never touches your data.
 Scripts use these functions:
   df = load_input("*.csv")              # read the one matching file in input/
   files = load_inputs("*.xlsx")         # read every matching file in input/
+  df = load_output("combined.csv")      # read an earlier step's result
   save_output(df, "results.csv")        # save to output/
+  save_output({"Sheet A": df1, "Sheet B": df2}, "results.xlsx")
+                                        # several tables, one sheet each
 
 This file creates nothing except those two folders.
 
@@ -78,7 +81,15 @@ def load_inputs(pattern="*.xlsx", require=None):
     return {path.name: _read(path, require) for path in matches}
 
 
-def _read(path, require):
+def load_output(filename, require=None):
+    """Read a file an earlier step saved in output/, all values as text."""
+    path = _folder("output") / filename
+    if not path.exists():
+        raise InputProblem(f"output/{filename} not found; run the earlier step that creates it first")
+    return _read(path, require, label="output")
+
+
+def _read(path, require, label="input"):
     if path.suffix.lower() in (".xlsx", ".xls"):
         df = pd.read_excel(path, dtype=str, keep_default_na=False)
     else:
@@ -98,7 +109,7 @@ def _read(path, require):
             f"it has: {', '.join(df.columns)}"
         )
 
-    print(f"Loaded input/{path.name}: {len(df):,} rows, {len(df.columns)} columns")
+    print(f"Loaded {label}/{path.name}: {len(df):,} rows, {len(df.columns)} columns")
     return df
 
 
@@ -108,27 +119,40 @@ def save_output(df, filename, notes=None):
     For .xlsx: bold header row that stays put when scrolling, columns sized
     to fit. `notes` is an optional list of lines written above the table
     (the first one bold, as a title).
+
+    For several tables in one .xlsx, pass {sheet name: table} as `df`, and
+    `notes` (optional) as {sheet name: lines}.
     """
     path = _folder("output") / filename
+    if isinstance(df, dict):
+        sheets, sheet_notes = df, notes or {}
+    else:
+        sheets, sheet_notes = {"Sheet1": df}, {"Sheet1": notes}
     if path.suffix.lower() != ".xlsx":
         df.to_csv(path, index=False)
     else:
-        from openpyxl.styles import Alignment, Font, PatternFill
-        from openpyxl.utils import get_column_letter
-
-        top = len(notes) + 1 if notes else 0
         with pd.ExcelWriter(path, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, startrow=top)
-            sheet = writer.sheets["Sheet1"]
-            for i, line in enumerate(notes or [], start=1):
-                sheet.cell(i, 1, line).font = Font(bold=(i == 1), size=13 if i == 1 else 11)
-            for cell in sheet[top + 1]:
-                cell.font = Font(bold=True, color="FFFFFF")
-                cell.fill = PatternFill("solid", fgColor="305496")
-                cell.alignment = Alignment(wrap_text=True, vertical="top")
-            for i, name in enumerate(df.columns, start=1):
-                longest = max([len(str(name))] + [len(str(v)) for v in df[name]])
-                sheet.column_dimensions[get_column_letter(i)].width = min(longest + 2, 45)
-            sheet.freeze_panes = sheet.cell(top + 2, 2)
-    print(f"Saved output/{filename}: {len(df):,} rows")
+            for name, table in sheets.items():
+                _write_sheet(writer, table, name, sheet_notes.get(name))
+    rows = ", ".join(f"{len(t):,}" for t in sheets.values())
+    print(f"Saved output/{filename}: {rows} rows")
     return path
+
+
+def _write_sheet(writer, df, name, notes):
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    top = len(notes) + 1 if notes else 0
+    df.to_excel(writer, sheet_name=name, index=False, startrow=top)
+    sheet = writer.sheets[name]
+    for i, line in enumerate(notes or [], start=1):
+        sheet.cell(i, 1, line).font = Font(bold=(i == 1), size=13 if i == 1 else 11)
+    for cell in sheet[top + 1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="305496")
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
+    for i, col in enumerate(df.columns, start=1):
+        longest = max([len(str(col))] + [len(str(v)) for v in df[col]])
+        sheet.column_dimensions[get_column_letter(i)].width = min(longest + 2, 45)
+    sheet.freeze_panes = sheet.cell(top + 2, 2)
