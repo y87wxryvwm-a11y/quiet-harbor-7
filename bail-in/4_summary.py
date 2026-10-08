@@ -13,8 +13,8 @@ Creates:
                         Size       how big bonds are, in size bands
                         Currency   USD, EUR, GBP, CAD, JPY, ... shares
                         Features   coupon, call structure, years left, rating
-                        US market  share sold into the US market (US ISIN or
-                                   144A), a stand-in for US ownership
+                        US market  share sold into the US market (see
+                                   3_clean.py), a stand-in for US ownership
 """
 
 # %% Load
@@ -187,10 +187,13 @@ save_output(
         "Features": [
             "Bond features",
             f"Dated bonds, years to maturity: median {dated.median():.1f}, "
-            f"dollar-weighted mean {(dated * dated_amt).sum() / dated_amt.sum():.1f}",
+            f"dollar-weighted mean {(dated * dated_amt).sum() / dated_amt.sum():.1f}. "
+            "Callable bonds are usually repaid at the call, often 1 year before maturity.",
+            "Bloomberg's VARIABLE covers fixed-then-reset bonds (usual for callable TLAC and AT1) "
+            "as well as structured notes.",
         ],
         "US market": [
-            "Sold into the US market (ISIN starts with US, or 144A): a stand-in, NOT US ownership",
+            "Sold into the US market (144A, or US ISIN with a digit and not Reg S): a stand-in, NOT US ownership",
             "Ownership needs holder data (Bloomberg HDS or SEC N-PORT fund holdings)",
         ],
     },
