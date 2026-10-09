@@ -15,6 +15,7 @@ Scripts use these functions:
   save_output(df, "results.csv")        # save to output/
   save_output({"Sheet A": df1, "Sheet B": df2}, "results.xlsx")
                                         # several tables, one sheet each
+  save_figure(fig, "figure.png")        # save a chart to output/
 
 This file creates nothing except those two folders.
 
@@ -136,6 +137,14 @@ def save_output(df, filename, notes=None):
                 _write_sheet(writer, table, name, sheet_notes.get(name))
     rows = ", ".join(f"{len(t):,}" for t in sheets.values())
     print(f"Saved output/{filename}: {rows} rows")
+    return path
+
+
+def save_figure(fig, filename):
+    """Save a matplotlib chart to output/ (.png at print resolution, or .pdf)."""
+    path = _folder("output") / filename
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    print(f"Saved output/{filename}")
     return path
 
 
