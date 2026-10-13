@@ -9,7 +9,7 @@ Population levels, each one the previous level minus one exclusion:
   2. Ultimate parent is one of the 16 G-SIB groups (drops US and Chinese
      parents that came in through subsidiaries abroad).
   3. Amount outstanding above zero.
-  4. Not matured: maturity after today, or perpetual.
+  4. Not matured: maturity after the data date (DATA_DATE), or perpetual.
   5. No repeat lines: drops lines with no ISIN that repeat a line with an
      ISIN (same parent, coupon, maturity, currency and amount).
   6. Final: each 144A / Reg S pair counted once. The same deal is often
@@ -23,7 +23,7 @@ Added columns (final population):
   Home country      the group's home country (not the issuing subsidiary's)
   Type              AT1 (junior, incl. CoCos), Tier 2 (subordinated), Senior
   Perpetual         Yes if the bond has no maturity date
-  Years to maturity from today; blank for perpetuals
+  Years to maturity from the data date; blank for perpetuals
   US market         Yes if sold into the US market: Series is 144A, or the
                     ISIN is US + a digit (a US CUSIP) and Series isn't Reg S.
                     US + a letter is a foreign-style code often used for
@@ -32,6 +32,7 @@ Added columns (final population):
   Series clean      Series in capitals, #N/A as blank
   Currency group    USD, EUR, GBP, CAD, JPY, AUD, CHF or Other
   Lines merged      how many Bloomberg lines this row stands for (usually 1)
+  Data as of        the data date (DATA_DATE), for the figures' source line
   Reg S line ISIN (dropped at Level 6)
                     for a 144A / Reg S pair, the ISIN of the other line,
                     which is listed on the Level 6 sheet; blank otherwise
@@ -54,8 +55,6 @@ Creates:
 """
 
 # %% Load
-from datetime import date
-
 import pandas as pd
 
 from kit import load_output, save_output
@@ -84,7 +83,9 @@ GSIBS = {
     "Standard Chartered": ("Standard Chartered", "United Kingdom"),
 }
 NA = "#N/A Field Not Applicable"
-TODAY = pd.Timestamp(date.today())
+# The day the Bloomberg data was exported. Update it for each new export.
+DATA_DATE = "2026-10-01"
+TODAY = pd.Timestamp(DATA_DATE)
 
 df["Amt Out"] = pd.to_numeric(df["Amt Out"].str.replace(",", ""), errors="coerce")
 df["Coupon"] = pd.to_numeric(df["Coupon"], errors="coerce")
@@ -107,7 +108,7 @@ df["Home country"] = match.str[1]
 step("Level 2 - US or CN parents", "...belong to a banking group whose parent is not American or Chinese, that...",
      "US or Chinese ultimate parent", match.notna())
 
-# %% 3-4. Outstanding today
+# %% 3-4. Outstanding on the data date
 step("Level 3 - nothing outstanding", "...still have money owed to investors, that...", "Amount outstanding zero or blank", df["Amt Out"] > 0)
 step("Level 4 - matured", "...have not reached their repayment date, or have none, that...", "Matured", ~(df["Maturity"] < TODAY))
 
@@ -180,6 +181,8 @@ df.loc[mty.str.contains("PERP"), "Call structure"] = "Perpetual"
 rating = df["BBG Composite"].str.replace("+", "").str.replace("-", "")
 df["Rating group"] = rating.where(rating.isin(["AAA", "AA", "A", "BBB", "BB", "B"]), "Not rated")
 df = df.drop(columns=["US ISIN", "US line", "Twin", "Group id"]).sort_values(["G-SIB", "Maturity"])
+
+df["Data as of"] = DATA_DATE
 
 # %% Column order: identifiers, then what the analysis uses, then the rest
 FIRST = [

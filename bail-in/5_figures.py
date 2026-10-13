@@ -19,15 +19,26 @@ import pandas as pd
 
 from kit import load_output, save_figure
 
-df = load_output("final_population.xlsx", require=["G-SIB", "Type", "Amt Out", "Currency group"])
+df = load_output("final_population.xlsx", require=["G-SIB", "Type", "Amt Out", "Currency group", "Data as of"])
 df["Amt Out"] = pd.to_numeric(df["Amt Out"])
 df["bn"] = df["Amt Out"] / 1e9
+data_date = pd.Timestamp(df["Data as of"].iloc[0])
+SOURCE = f"Source: Bloomberg, as of {data_date.day} {data_date:%B %Y}."
 TYPES = ["AT1", "Tier 2", "Senior"]
 COLORS = {"AT1": "#1b3a5c", "Tier 2": "#4f81b0", "Senior": "#a9c4de"}
 plt.rcParams.update({
     "font.family": "serif", "font.size": 9, "axes.titlesize": 10, "axes.spines.top": False,
     "axes.spines.right": False, "legend.frameon": False, "figure.dpi": 100,
 })
+
+
+def save_with_source(fig, filename):
+    """Add the source line below everything else on the figure, then save."""
+    fig.canvas.draw()
+    box = fig.get_tightbbox(fig.canvas.get_renderer())
+    width, height = fig.get_size_inches()
+    fig.text(box.x0 / width, (box.y0 - 0.08) / height, SOURCE, ha="left", va="top", fontsize=7)
+    save_figure(fig, filename)
 
 
 def stacked_barh(ax, table, xlabel):
@@ -52,7 +63,7 @@ def by_group_figure(by, title, filename):
     fig.suptitle(title, fontsize=11)
     fig.tight_layout()
     fig.legend(*a.get_legend_handles_labels(), ncol=3, loc="upper center", bbox_to_anchor=(0.5, 0.01))
-    save_figure(fig, filename)
+    save_with_source(fig, filename)
 
 
 # %% Figure 1: type
@@ -70,7 +81,7 @@ for ax, values, fmt in [(a, n, "{:,.0f}"), (b, amt, "{:,.0f}")]:
         ax.annotate(fmt.format(v), (x, v), ha="center", va="bottom", fontsize=8)
 fig.suptitle("TLAC bonds outstanding by instrument type", fontsize=11)
 fig.tight_layout()
-save_figure(fig, "fig01_type.png")
+save_with_source(fig, "fig01_type.png")
 
 # %% Figures 2-3: G-SIB and home country
 by_group_figure("G-SIB", "TLAC bonds outstanding by G-SIB", "fig02_gsib.png")
@@ -97,7 +108,7 @@ b.set_ylabel("Cumulative % of amount outstanding")
 b.set_title("(b) Cumulative share of amount outstanding")
 fig.suptitle("Size of TLAC bonds", fontsize=11)
 fig.tight_layout()
-save_figure(fig, "fig04_size.png")
+save_with_source(fig, "fig04_size.png")
 
 # %% Figure 5: currency
 by_group_figure("Currency group", "TLAC bonds outstanding by currency", "fig05_currency.png")
