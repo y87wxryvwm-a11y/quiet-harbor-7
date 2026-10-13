@@ -21,6 +21,24 @@ The file population.xlsx starts with a summary of each filter from the raw start
 - **Level 5 - repeat lines:** drops lines without an ISIN that repeat a line with one. They have the same parent, coupon, maturity, currency and amount, so they are the same bond listed twice. Keeping them would count the bond and its dollars twice.
 - **Level 6 - 144A-Reg S pairs:** many deals are listed twice, once for US buyers (144A) and once for buyers outside the US (Reg S), and both lines carry the full amount. Counting both would overstate the totals, so each deal is counted once. The line kept is the one sold to US buyers.
 
+## Final population
+
+The file final_population.xlsx is the final population, one row per bond. It has the Bloomberg columns plus these added columns:
+
+- **G-SIB** and **Home country:** the bank and its home country.
+- **Type:** AT1, Tier 2 or Senior, explained below.
+- **Currency group:** USD, EUR, GBP, CAD, JPY, AUD, CHF or Other.
+- **Size band:** the amount outstanding in bands, from under $10m to $2bn and up.
+- **Years to maturity** and **Years left:** years until the maturity date, exact and in bands. Blank or Perpetual for bonds with no maturity date.
+- **Perpetual:** Yes if the bond has no maturity date.
+- **Call structure:** whether the bank can repay early (Callable), must repay at maturity (Bullet), or never has to repay (Perpetual).
+- **Rating group:** the Bloomberg rating without the + or -.
+- **US market:** Yes if the bond was sold into the US market (144A or SEC-registered).
+- **Lines merged:** how many Bloomberg lines the row stands for. 2 for a 144A / Reg S pair.
+- **Reg S line ISIN (dropped at Level 6):** for a 144A / Reg S pair, the ISIN of the other line, which is on the Level 6 sheet.
+- **Series clean:** the Series column in capitals.
+- **Data as of:** the date of the Bloomberg export.
+
 ## Summary
 
 Each bond is given one of three types, from riskiest to safest:
