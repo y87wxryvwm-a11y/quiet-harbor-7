@@ -1,0 +1,171 @@
+This is a new project.
+
+TASK
+I'm studying how US companies go public and whether they were emerging
+growth companies (EGCs) at their IPO. The base population is
+reg_count_final_2025.csv. Each row is one company, identified by CIK
+(column CIK).
+
+You will build two files:
+- A WORKING file with the answers plus the evidence and checks behind
+  them. Your work is finished only when the working file passes every
+  check below.
+- A FINAL file: the original spreadsheet plus five answer columns,
+  copied from the working file. This is the clean file I use in my
+  research.
+
+WHICH ROWS TO RESEARCH
+Research a row only if column "form" is 10-K or 10-K/A AND column ABS
+does not mark it as asset-backed. List ABS's distinct values in the
+report and say which you treated as asset-backed. Put EXCLUDED in every
+new column for all other rows.
+
+Use only SEC EDGAR filings as sources.
+
+DEFINITIONS
+- Traditional IPO: the company's first SEC-registered, underwritten
+  sale of its common stock (or units) to the public for cash, with the
+  shares listed on a US exchange. NOT a traditional IPO: direct listing,
+  merger with a SPAC (de-SPAC), reverse merger, spin-off, Form 10
+  registration, Reg A offering, or an offering of shares that already
+  traded publicly (OTC or abroad). If the company is itself a SPAC, its
+  own SPAC IPO counts.
+- Cutoff: full research only for IPOs whose registration became
+  effective on or after 2015-01-01.
+- EGC revenue limit by IPO effective date: $1.0 billion before
+  2017-04-12; $1.07 billion from 2017-04-12; $1.235 billion from
+  2022-09-20.
+
+CELL VALUES (both files)
+- NONE = truly none (for example, every IPO column when ipo = 0)
+- NOT COLLECTED = an IPO effective before 2015-01-01 (fill only ipo
+  and ipo_effective_date)
+- EXCLUDED = a row outside the research scope
+- Blank = not yet known. None may remain at the end.
+- Dates as YYYY-MM-DD. Money in US dollars as plain numbers.
+
+FINAL FILE: reg_count_final_2025_ipo.csv
+Every original row and column exactly as in the input (no deletions,
+re-sorting or edits), plus these five columns:
+1. ipo: 1 or 0.
+2. ipo_effective_date: the date of the SEC's EFFECT notice for the IPO
+   registration statement.
+3. final_prospectus_url: a direct link to the prospectus document on
+   sec.gov. It is the first 424B filing under the IPO registration
+   statement's file number on or after the effective date.
+4. final_prospectus_date: its EDGAR filing date.
+5. egc_at_ipo: 1 or 0.
+Build this file in code from the working file. Never edit it by hand.
+
+WORKING FILE: reg_count_final_2025_ipo_working.xlsx
+Sheet "data": CIK, the five answer columns, then these evidence
+columns:
+
+IPO evidence
+- ipo_route: if ipo = 0, how the company became public: direct
+  listing, de-SPAC, reverse merger, spin-off, Form 10, Reg A,
+  uplisting, or never sold stock publicly. IPO if ipo = 1.
+- ipo_route_accession: the EDGAR filing that shows the route.
+- ipo_route_quote: an exact quote from that filing (under 40 words)
+  that shows the route.
+- ipo_registration_form (S-1, S-11, etc.), ipo_registration_accession,
+  ipo_file_number (333-xxxxxx), ipo_effect_notice_accession.
+
+Final prospectus evidence (IPOs effective 2015 on)
+- final_prospectus_accession, final_prospectus_form (424B4, 424B1,
+  etc.)
+- ipo_offer_price, ipo_exchange, ipo_lead_underwriter: from the
+  prospectus cover.
+- ipo_no_public_market_quote: the prospectus sentence saying there was
+  no public market before the offering.
+
+EGC evidence (IPOs effective 2015 on)
+- egc_evidence_accession: the filing used (registration statement or
+  final prospectus).
+- egc_evidence_type: "cover checkbox" or "prospectus statement".
+- egc_checkbox: checked, unchecked, or no box.
+- egc_quote: an exact quote stating the company is (or is not) an EGC.
+- pre_ipo_fiscal_year_end, pre_ipo_revenue: the last full fiscal year
+  before the IPO and its total revenue, from the prospectus.
+- egc_revenue_limit: the limit in force on the effective date.
+- not_egc_reason: if egc_at_ipo = 0, one of: revenue over limit,
+  nonconvertible debt over $1 billion, earlier registered sale of
+  common stock before 2011-12-08, large accelerated filer, or company
+  chose not to be an EGC.
+- not_egc_evidence: the number, date or quote that proves the reason.
+- first_10k_after_ipo_accession, first_10k_egc_checkbox.
+
+Check results
+- checks_failed: names of the checks this row fails, separated by
+  semicolons. Empty if all pass.
+- check_explanation: for each failed check, the filing's own words or
+  numbers showing why the exception is real.
+
+Sheet "checks": one row per check with its name, what it tests in plain
+English, and how many rows passed and failed.
+
+CHECKS (run in code; fix rows and rerun until the only failures left
+are real, explained exceptions)
+Structure
+- rows_intact: the final file has the same rows, order and original
+  values as the input, compared cell by cell.
+- final_matches_working: the final file's five answer columns equal the
+  working file's, row by row.
+- no_blanks: no blank new cell in a researched row.
+- valid_values: 1/0 columns hold only 1 or 0; dates are valid
+  YYYY-MM-DD; categories come from the lists above; accession numbers
+  match EDGAR's format.
+- consistent_fill: ipo = 0 means IPO columns are NONE; a pre-2015 IPO
+  means prospectus and EGC columns are NOT COLLECTED; EXCLUDED only on
+  rows outside the scope.
+- unique_cik: each CIK appears once.
+Sources
+- quotes_verbatim: every quote is found word for word in the filing
+  its accession points to (fetch the filing and search it).
+- links_work: every URL returns HTTP 200 from sec.gov and opens the
+  document itself, and the URL's accession equals
+  final_prospectus_accession.
+- same_company: every cited filing is filed by the row's CIK (or a
+  predecessor named in check_explanation).
+IPO logic
+- same_registration: the prospectus is filed under ipo_file_number.
+- prospectus_timing: final_prospectus_date is 0 to 5 days after
+  ipo_effective_date.
+- final_not_preliminary: ipo_offer_price is a single number, not a
+  range.
+- ipo_before_10k: ipo_effective_date is before the first 10-K and
+  before the 2025 annual report.
+- registration_form_fits: the registration form is an IPO form (S-1,
+  S-11, or their amendments).
+- no_market_quote_present: every ipo = 1 from 2015 on has
+  ipo_no_public_market_quote.
+EGC logic
+- egc_revenue: egc_at_ipo = 1 means pre_ipo_revenue is below
+  egc_revenue_limit.
+- egc_quote_fits: egc_quote contains "emerging growth company".
+- checkbox_matches: for registrations filed on or after 2017-04-12,
+  egc_checkbox agrees with egc_at_ipo.
+- not_egc_has_reason: egc_at_ipo = 0 always has not_egc_reason and
+  not_egc_evidence.
+- first_10k_agrees: egc_at_ipo agrees with first_10k_egc_checkbox, or
+  the difference is explained (for example, the company lost EGC
+  status within its first year).
+
+DELIVER
+Email me both files as attachments: the final file (the one I'll use)
+and the working file (the evidence behind it).
+
+The email body is a plain-English report organized under these
+questions, with counts and short tables:
+1. How many companies are in the file, and how many were researched
+   (10-K filers that are not asset-backed)?
+2. How many had a traditional IPO? How did the rest become public, by
+   route?
+3. How many IPOs became effective in 2015 or later, by year?
+4. How many of those were EGCs at their IPO, by year, and what share?
+5. Which ones were not EGCs, and why (by reason)?
+6. How many days usually passed between effectiveness and the final
+   prospectus, and which IPOs were outliers?
+7. Did every check pass? List each remaining exception and why it's
+   real.
+8. Which rows needed a judgement call, and how was each decided?
