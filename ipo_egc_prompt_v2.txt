@@ -1,6 +1,15 @@
-This extends the IPO and EGC project you built from ipo_egc_prompt.txt.
-Reuse its cached filings, code and findings wherever they still fit.
-Where this file and the first prompt differ, this file wins.
+This is a new project. This prompt is its complete specification:
+follow it exactly.
+
+EARLIER WORK
+This machine has the finished scripts, cached filings and outputs of an
+earlier, narrower IPO and EGC project. Use them only as an on-ramp: reuse
+code, cached filings and findings where they save time, but nothing
+carries over on trust. Every value in this project's output must meet
+the definitions below and pass the checks below, wherever it came from.
+Where the earlier work defined something differently (for example, its
+IPO date was the IPO registration's effective date, not the date the
+company became subject to reporting), this prompt's definition applies.
 
 TASK
 I'm studying how US companies become subject to SEC reporting (go
@@ -26,9 +35,9 @@ Use only SEC EDGAR filings as sources (your S3 copy of EDGAR counts).
 Every link you deliver points to sec.gov.
 
 HOW TO WORK
-The last run worked entirely in code. It fetched filings in code, ran,
-found surprises, fetched again and reran, many times over, and it took
-far too long. This time, use your edgar-toolkit (~/projects/edgar-toolkit/)
+The earlier project worked entirely in code. It fetched filings in code,
+ran, found surprises, fetched again and reran, many times over, and it
+took far too long. This time, use your edgar-toolkit (~/projects/edgar-toolkit/)
 and Bedrock for the reading, and use code for building and checking.
 1. Find filings with edgar-index, not by crawling EDGAR. Get each
    company's filing history (forms, dates, file numbers) from it in one
@@ -313,3 +322,5 @@ questions, with counts and short tables:
     real. How did the bedrock-map runs score against the answer key,
     and what did they cost?
 11. Which rows needed a judgement call, and how was each decided?
+12. What did you reuse from the earlier project, and how many of its
+    values changed under this prompt's definitions?
