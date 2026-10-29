@@ -14,16 +14,23 @@ company became subject to reporting), this prompt's definition applies.
 TASK
 I'm studying how US companies become subject to SEC reporting (go
 public) and whether they were emerging growth companies (EGCs) at that
-point and soon after. The base population is reg_count_final_2025.csv.
-Each row is one company, identified by CIK (column CIK).
+point and soon after. The base population is reg_count_final_2025.csv
+(find it on this machine; if there is more than one copy, ask me which
+to use). Each row is one company, identified by CIK (column CIK), and is
+based on the latest annual report the company filed in calendar 2025.
+Below, "the 2025 annual report" means that filing, or the original
+10-K or 10-KT it amends if it is an amendment.
 
 You will build two files:
 - A WORKING file with the answers plus the evidence and checks behind
-  them. Your work is finished only when the working file passes every
-  check below.
+  them. Your work is finished when the working file passes every check
+  below, apart from exceptions explained as the CHECKS section allows.
 - A FINAL file: the original spreadsheet plus the answer columns,
   copied from the working file. This is the clean file I use in my
   research.
+
+Keep a short progress log in the project folder (what is done, what is
+next), so the work can resume if your session stops.
 
 WHICH ROWS TO RESEARCH
 Research a row only if column "form" is 10-K, 10-K/A, 10-KT or 10-KT/A
@@ -41,33 +48,44 @@ The earlier project worked entirely in code. It fetched filings in code,
 ran, found surprises, fetched again and reran, many times over, and it
 took far too long. This time, use your edgar-toolkit (~/projects/edgar-toolkit/)
 and Bedrock for the reading, and use code for building and checking.
+Code alone answers anything the index holds: filing dates, forms, file
+numbers, EFFECT notices, 424B filings, SIC codes, the 10-K run and
+censoring. Use the models only for reading filing text.
 1. Find filings with edgar-index, not by crawling EDGAR. Get each
    company's filing history (forms, dates, file numbers) from it in one
    pass.
-2. Fetch with edgar-fetch, once. Keep what you fetch (regex windows,
-   inline-XBRL facts with --ix) in a local cache that every later step
-   reads. Its ☒/☐ checkbox conversion is how you read EGC checkboxes.
+2. Fetch each filing once with edgar-fetch, and keep what you fetch
+   (regex windows, inline-XBRL facts with --ix) in a local cache that
+   every later step reads. Its ☒/☐ checkbox conversion is how you read
+   EGC checkboxes.
 3. Investigate before coding. Before writing the rules for a field, use
-   bedrock-ask on a small, varied set of real companies: a few of each
-   type (traditional IPO, SPAC, de-SPAC including one with a new CIK,
-   reverse merger including one with a new CIK, spin-off, uplisting,
-   debt-only issuer, a company that went dark and came back). Record each
+   bedrock-ask on a small, varied set of real companies: about three of
+   each type (traditional IPO, SPAC, de-SPAC including one with a new
+   CIK, reverse merger including one with a new CIK, successor issuer,
+   spin-off, direct listing, uplisting, Reg A, debt-only issuer, a
+   company that went dark and came back), 30 to 40 in all. Record each
    answer as CIK, field, value, accession and exact quote, plus the edge
    cases seen. Turn those into code rules, and keep the companies as an
    answer key (gold labels) with their expected values.
 4. Extract in bulk with bedrock-map. Give it a JSON schema per field and
    only the passages it needs. Run --dry-run first and set --max-cost
    from it. Use --escalate sonnet --escalate-when confidence=low. Score
-   against the answer key with --gold before every full run, and don't
-   run the full population until it matches the key. Every quote must
-   pass quote_ok.
+   against the answer key with --gold before every full run. Run the
+   full population only when every answer-key item agrees, or each
+   disagreement is settled by fixing the rule or correcting the label,
+   with the reason in edge_cases.csv. If a field still misses after
+   three rounds of changes, stop tuning it: send its hard cases to
+   bedrock-ask with Sonnet and record the pattern. Every quote must pass
+   quote_ok.
 5. Test changes on known cases first. Run a new or changed rule on the
    answer key and the companies it affects. Run the full population only
    when those pass. bedrock-map's cache means reruns don't pay twice.
 6. Send leftovers to the models, not to more code loops. Rows the code
    can't settle (failed checks, unclear type) go to bedrock-map or
    bedrock-ask in batches with the relevant passages. When several
-   leftovers share a pattern, make it a code rule.
+   leftovers share a pattern, make it a code rule. A row that a
+   whole-filing Sonnet read with bedrock-ask still can't settle is
+   unresolved: record it as the CHECKS section says and move on.
 7. Keep a growing edge-case file (edge_cases.csv: CIK, field, issue,
    decision, accession, quote). The checks read it, so decisions stay
    fixed when you rebuild.
@@ -77,48 +95,89 @@ and Bedrock for the reading, and use code for building and checking.
    running it again.
 
 DEFINITIONS
+- Lineage: the chain of reporting entities behind a row's CIK. It
+  includes a SPAC the company merged with, the public company it
+  reverse-merged into, and the predecessor of a successor issuer, even
+  where the merger or succession created a new CIK. "The company" in
+  the rules below includes its lineage.
 - Effective date: the date the company became subject to SEC reporting
-  requirements. For most companies (traditional IPOs) this is the first
-  time its securities were sold to the public. By type:
-  - Traditional IPO: the IPO registration statement's effective date
-    (the SEC's EFFECT notice).
-  - SPAC, and any company that came out of a de-SPAC: the effective
-    date of the original SPAC's IPO, including where a new entity (new
-    CIK) was created at the merger.
-  - Reverse merger: the date the public company that acquired it
-    became subject to reporting, including where a new entity (new CIK)
-    was created at the merger.
-  - Uplisting: the first date the company became subject to SEC
-    reporting, not the date it listed on a national exchange.
-  - Spin-off: the effective date of the spun-off company's own
-    registration statement (usually a Form 10).
+  requirements. By type:
+  - Traditional IPO and SPAC IPO: the IPO registration statement's
+    effective date (the SEC's EFFECT notice).
+  - A company that came out of a de-SPAC: the effective date of the
+    original SPAC's IPO.
+  - Reverse merger: the effective date of the public company it merged
+    into, found by these same rules.
+  - Successor issuer (a new CIK that took over a reporting company's
+    registration, for example in a holding-company reorganization, a
+    reincorporation or an emergence from bankruptcy, usually shown by
+    an 8-K12B or 8-K12G3): the predecessor's effective date and type.
+  - Direct listing: the effective date of the registration statement it
+    listed under.
+  - Spin-off and Form 10 (other): the effective date of its Form 10:
+    the EFFECT notice if there is one, otherwise 60 days after the Form
+    10 was filed (when it takes effect by law).
+  - Reg A: the effective date of its Form 8-A.
+  - Uplisting: the effective date of the registration that made it
+    subject to reporting, not the date it listed on an exchange.
   - Debt-only issuer: the effective date of its debt registration
     statement.
-  - Went dark and came back: if the company stopped reporting (for
-    example, filed a Form 15) and later resumed, use the date reporting
-    resumed.
+  - Went dark and came back: a company stopped reporting if it filed a
+    Form 15 (any variant) or filed no 10-K or 10-Q for more than two
+    years. If it later resumed, use the date reporting resumed: the
+    effective date of its new registration statement if it filed one,
+    otherwise the filing date of its first 10-K or 10-Q after the stop.
 - Censoring: if the effective date is before 2015-01-01, record BEFORE
-  2015 and don't pin down the exact date. A company is censored only if
-  it filed a 10-K or 10-Q before 2015-01-01 and has not stopped
-  reporting since.
-- Traditional IPO: the company's first SEC-registered, underwritten
-  sale of its common stock (or units) to the public for cash, with the
-  shares listed on a US exchange. SPAC IPOs count. Not traditional:
-  direct listing, reverse merger, spin-off, Form 10 registration, Reg A
-  offering, uplisting of shares that already traded publicly (OTC or
-  abroad), or debt-only registration.
-- EGC self-report: what the company itself says in a filing. 1 if the
-  cover checkbox is ticked or the text says it is an emerging growth
-  company. 0 if the checkbox is unticked or the text says it is not.
-  NONE if the filing has no checkbox and says nothing either way.
-  (Registration statements, 10-Qs and 10-Ks have had the checkbox
-  since 2017-04-12.)
-- Revenue test: 1 if total revenue for the last full fiscal year before
-  the date in question is below the EGC limit, otherwise 0. The limit
-  is $1.0 billion before 2017-04-12, $1.07 billion from 2017-04-12, and
-  $1.235 billion from 2022-09-20.
+  2015 and don't pin down the exact date. Shortcut: a company that filed
+  a 10-K or 10-Q before 2015-01-01 and has not stopped reporting since
+  is censored; its date needs no further research. For every other
+  company, find the date; if it turns out to be before 2015-01-01,
+  record BEFORE 2015.
+- Going-public types (column 2). Use the first one that fits:
+  1. resumed reporting: went dark and came back, as defined above.
+  2. SPAC IPO: the first entity in the lineage to become subject to
+     reporting was a SPAC (a blank check company), whether or not it
+     has since merged.
+  3. reverse merger: a private operating company became public by
+     merging into a reporting company that is not a SPAC (often a
+     shell), with the private company's owners taking control. Signs:
+     an 8-K with Item 2.01 and Form 10 information, or Item 5.06
+     (change in shell company status). An ordinary acquisition, where
+     the public company's owners keep control, is not one.
+  4. spin-off: a parent distributed the company's shares to its own
+     shareholders.
+  5. traditional IPO: the company's first SEC-registered, underwritten
+     sale of its common stock (or units) to the public for cash, with
+     the shares listed on a US exchange.
+  6. direct listing: listed on a US exchange through a registration
+     statement, without an underwritten offering.
+  7. uplisting: became subject to reporting when it listed on a US
+     exchange, while its shares already traded OTC or abroad. (A
+     company that was already reporting before it listed keeps the type
+     of its original route.)
+  8. Reg A: became subject to reporting after a Regulation A offering.
+  9. debt-only: only its debt is registered.
+  10. Form 10 (other): registered on Form 10 for any other reason.
+  11. other: none of the above (for example, shares first registered on
+      an S-4 in a merger). Record why in edge_cases.csv.
+- EGC self-report: what the company itself says in a filing. 1 if it
+  says it is an emerging growth company, 0 if it says it is not (or is
+  no longer), NONE if the filing says nothing either way. Where the
+  filing has the EGC checkbox, the checkbox decides (ticked = 1,
+  unticked = 0). Otherwise a sentence in the text decides. Registration
+  statements, 10-Qs, 10-Ks and 8-Ks filed on or after 2017-04-12 have
+  the checkbox; final prospectuses (424B) do not.
+- Revenue test: 1 if the company's total revenue for its last full
+  fiscal year ended before the date in question is below the EGC limit
+  in force on that date, otherwise 0. Total revenue is the total
+  revenue line the company reports (for banks: total interest and
+  dividend income plus noninterest income). The limit is $1.0 billion
+  before 2017-04-12, $1.07 billion from 2017-04-12, and $1.235 billion
+  from 2022-09-20.
 - Supplemented with the revenue test: use the self-report where it is 1
-  or 0. Use the revenue test only where the self-report is NONE.
+  or 0. Use the revenue test only where the self-report is NONE. If the
+  self-report is NONE and no revenue figure can be found, the answer is
+  NONE.
 
 CELL VALUES (both files)
 - NONE = truly none (for example, no de-SPAC happened, or no filing in
@@ -126,6 +185,7 @@ CELL VALUES (both files)
 - NOT COLLECTED = depends on an effective date before 2015
 - EXCLUDED = a row outside the research scope
 - Blank = not yet known. None may remain at the end.
+- ipo and spac hold 1 or 0. The EGC columns hold 1, 0 or NONE.
 - Dates as YYYY-MM-DD. Money in US dollars as plain numbers.
 
 FINAL FILE: reg_count_final_2025_ipo.csv
@@ -134,52 +194,62 @@ re-sorting or edits), plus these columns:
 
 Becoming public
 1. effective_date: as defined above, or BEFORE 2015.
-2. going_public_type: traditional IPO, SPAC IPO, direct listing,
-   reverse merger, spin-off, Form 10 (other), Reg A, uplisting,
-   debt-only, or resumed reporting. There is no de-SPAC category: a
-   company that came out of a de-SPAC is SPAC IPO.
+2. going_public_type: one of the types defined above. There is no
+   de-SPAC type: a company that came out of a de-SPAC is SPAC IPO.
 3. ipo: 1 if going_public_type is traditional IPO or SPAC IPO, else 0.
-4. spac: 1 if the first entity that became subject to reporting was a
-   SPAC, whether it is still a SPAC or has since merged, including where
-   a new entity (new CIK) was created at the merger.
+4. spac: 1 if going_public_type is SPAC IPO, else 0.
 5. final_prospectus_url: direct link to the IPO's final prospectus
    document on sec.gov (the first 424B filing under the IPO
-   registration's file number on or after the effective date). NONE if
-   ipo = 0.
+   registration's file number on or after the effective date; for a
+   de-SPAC company, the SPAC's). NONE if ipo = 0.
 6. final_prospectus_date: its EDGAR filing date.
 
 EGC status (NOT COLLECTED when censored)
-7. egc_at_effective_self: EGC self-report from any of the company's
-   filings within 10 days before or after the effective date. NONE if
-   no filing in that window states it.
-8. egc_at_effective: column 7 supplemented with the revenue test.
-9. egc_first_report_self: EGC self-report from the first 10-Q or 10-K
-   filed after the effective date.
-10. egc_first_report: column 9 supplemented with the revenue test.
+7. egc_at_effective_self: EGC self-report from the filings of the entity
+   that became subject to reporting (for a de-SPAC company, the SPAC)
+   dated within 10 days before or after the effective date. Look in
+   this order and use the first that states it: the registration
+   statement's last version before the effective date, the final
+   prospectus, then any other filing in the window. NONE if none
+   states it.
+8. egc_at_effective: column 7 supplemented with the revenue test, as
+   of the effective date.
+9. egc_first_report_self: EGC self-report from the same entity's first
+   10-Q, 10-K or 10-KT filed after the effective date.
+10. egc_first_report: column 9 supplemented with the revenue test, as
+    of that report's filing date.
 
 Reporting history (fill for every researched row, censored or not)
 11. first_10k_current_string: the filing date of the first 10-K in the
     most recent unbroken run of fiscal-year 10-Ks ending with the 2025
-    annual report. Use original 10-K filing dates, not amendments.
-    Example: 10-Ks for every fiscal year 2019-2024 means the FY2019
-    10-K's date. FY2019, then a gap, then FY2022-2024 means the FY2022
-    date. A 10-KT (transition report after a fiscal year change) does
-    not break the run.
+    annual report. Count only 10-Ks filed under the row's own CIK, and
+    use original filing dates, not amendments (a fiscal year with only
+    an amendment counts, at the amendment's date). Fiscal years are
+    consecutive when their period ends are 11 to 13 months apart. A
+    10-KT (transition report after a fiscal year change) does not break
+    the run. Example: 10-Ks for every fiscal year 2019-2024 means the
+    FY2019 10-K's date. FY2019, then a gap, then FY2022-2024 means the
+    FY2022 date.
 
 After becoming public (fill for every researched row; for censored
 rows, look only at events on or after 2015-01-01)
-12. despac_date: if the company took part in a de-SPAC after its
-    effective date, the date the merger closed. Otherwise NONE.
-13. egc_after_despac_self: EGC self-report from the first filing after
-    the de-SPAC date that states it.
-14. revenue_after_despac: total revenue for the first reporting period
-    ending after the de-SPAC date.
+12. despac_date: if the company's lineage includes a SPAC that completed
+    its merger (de-SPAC) after the effective date, the date the merger
+    closed (the event date of the closing 8-K). Otherwise NONE.
+13. egc_after_despac_self: EGC self-report from the first filing on or
+    after the de-SPAC date that states it (usually the closing 8-K),
+    looking no further than the first 10-Q or 10-K after that date.
+    NONE if none of those states it.
+14. revenue_after_despac: total revenue for the first quarter or fiscal
+    year ending on or after the de-SPAC date, from the first 10-Q or
+    10-K that reports it: the three-month figure from a 10-Q, the
+    full-year figure from a 10-K.
 15. revenue_after_despac_period_end and
-16. revenue_after_despac_months: that period's end date and length
-    (3, 6, 9 or 12 months), so the revenue figure can be read.
+16. revenue_after_despac_months: that period's end date and length (3
+    or 12; another length only for a transition period).
 17. reverse_merger_date: if the company took part in a reverse merger
-    with a public acquirer that is not a SPAC after its effective date,
-    the date of the most recent one. Otherwise NONE.
+    after its effective date, the date of the most recent one (the
+    event date of its 8-K). Otherwise NONE.
 18-21. egc_after_reverse_merger_self, revenue_after_reverse_merger,
     revenue_after_reverse_merger_period_end,
     revenue_after_reverse_merger_months: same as 13-16, for the
@@ -190,68 +260,90 @@ Build this file in code from the working file. Never edit it by hand.
 WORKING FILE: reg_count_final_2025_ipo_working.xlsx
 Sheet "data": CIK, every answer column, and the evidence behind each
 one:
-- For every answer, the accession number of the filing it came from
-  and the exact quote (under 40 words) or number that supports it, in
-  columns named <answer>_accession and <answer>_quote (or _value).
+- For every answer read from a filing, the accession number of that
+  filing and the exact quote (under 40 words) or number that supports
+  it, in columns named <answer>_accession and <answer>_quote (or
+  _value). For a checkbox, quote the checkbox line. Answers that are
+  NONE, NOT COLLECTED or EXCLUDED, and answers worked out from other
+  columns (ipo, spac, and columns 8 and 10 where they copy the
+  self-report), need no accession or quote; leave those evidence cells
+  empty.
 - For a self-reported EGC answer, also: the filing's form and date, and
   whether it came from a checkbox or a sentence.
 - For a revenue-tested EGC answer, also: the fiscal year end used, the
   revenue, and the limit applied.
 - For the effective date, also: the filing that made the company
-  subject to reporting (form, file number, accession) and, for
-  de-SPACs and reverse mergers, the CIK of the original public entity
-  and whether a new CIK was created at the merger.
+  subject to reporting (form, file number, accession) and, where the
+  date comes from the lineage, the CIK of the original entity and
+  whether a new CIK was created.
+- egc_change_reason: where column 7 is 1 and column 9 is 0, one of:
+  revenue over limit, nonconvertible debt over $1 billion, large
+  accelerated filer, or other; with its
+  evidence.
 - For the 10-K run: the list of fiscal year ends in the run, and the
   accession of the 10-K before the gap (if any).
-- For IPOs from 2015 on: the registration form and file number, offer
-  price, exchange, lead underwriter, and the prospectus sentence saying
-  there was no public market before the offering.
+- For IPOs from 2015 on, from the final prospectus: the registration
+  form and file number, offer price, exchange, lead underwriter, and
+  the sentence saying there was no public market before the offering.
 - checks_failed: names of the checks this row fails, separated by
   semicolons. Empty if all pass.
 - check_explanation: for each failed check, the filing's own words or
-  numbers showing why the exception is real.
+  numbers showing why the exception is real, or UNRESOLVED and what was
+  tried.
 
 Sheet "checks": one row per check with its name, what it tests in plain
 English, and how many rows passed and failed.
 Sheet "edge_cases": the contents of edge_cases.csv.
 
-CHECKS (run in code; fix rows and rerun until the only failures left
-are real, explained exceptions)
+CHECKS
+Run them in code. Fix rows and rerun until every failure left is a real
+exception, explained in check_explanation. A row that a whole-filing
+Sonnet read still can't settle may be marked UNRESOLVED. If more than 1%
+of researched rows fail the same check, treat it as a rule problem: fix
+the rule rather than explaining rows one by one.
 Structure
 - rows_intact: the final file has the same rows, order and original
   values as the input, compared cell by cell.
 - final_matches_working: the final file's answer columns equal the
   working file's, row by row.
-- no_blanks: no blank new cell in a researched row.
-- valid_values: 1/0 columns hold only 1, 0 or NONE where allowed; dates
-  are valid YYYY-MM-DD; categories come from the lists above; accession
-  numbers match EDGAR's format.
-- consistent_fill: ipo = 0 means prospectus columns are NONE; censored
-  rows have NOT COLLECTED in columns 2-10; EXCLUDED only on rows
-  outside the scope; no despac_date means columns 13-16 are NONE, and
-  the same for reverse mergers.
-- unique_cik: each CIK appears once.
+- no_blanks: no blank answer cell in a researched row of the final
+  file.
+- valid_values: values follow CELL VALUES; categories come from the
+  lists above; accession numbers match EDGAR's format.
+- consistent_fill: ipo = 0 means columns 5-6 are NONE; censored rows
+  have NOT COLLECTED in columns 2-10; EXCLUDED only on rows outside the
+  scope; no despac_date means columns 13-16 are NONE, and the same for
+  reverse mergers.
+- unique_cik: each CIK appears once. If the input itself repeats a
+  CIK, keep the rows and list them in the report.
 Sources
 - quotes_verbatim: every quote is found word for word in the filing
-  its accession points to.
+  its accession points to (after quote_ok's text clean-up).
 - links_work: every URL returns HTTP 200 from sec.gov and opens the
   document itself, and the URL's accession equals the recorded one.
-- same_company: every cited filing is filed by the row's CIK, or by a
-  predecessor recorded in the working file.
-- lineage_linked: every row whose effective date comes from an earlier
-  entity (a SPAC, or a reverse-merger acquirer with a different CIK)
-  names that entity's CIK, and the merger filing links the two.
+  Send a User-Agent and at most 10 requests per second. If sec.gov
+  can't be reached from this machine, confirm each document exists in
+  the S3 copy instead and say so in the report.
+- same_company: every cited filing is filed by the row's CIK, or by an
+  entity in its recorded lineage.
+- lineage_linked: every row whose effective date comes from its
+  lineage names the original entity's CIK, and the merger or
+  succession filing (closing 8-K, 8-K12B or 8-K12G3) is filed by one of
+  the two and names the other.
 Effective date
 - effective_has_evidence: every effective date has the filing that made
   the company subject to reporting, and that filing's form fits the
-  type (S-1/S-11 for IPOs, Form 10 for spin-offs, and so on).
+  type (S-1/S-11 for IPOs, Form 10 for spin-offs and Form 10 (other),
+  8-A for Reg A, and so on).
 - no_reports_before: the company filed no 10-K or 10-Q before its
-  effective date, unless a Form 15 or a reporting gap comes between
-  them (the went-dark case).
-- censoring_right: BEFORE 2015 only where a 10-K or 10-Q was filed
-  before 2015-01-01 and reporting never stopped afterwards.
-- type_fits: ipo = 1 exactly when the type is traditional IPO or SPAC
-  IPO; spac = 1 exactly when the type is SPAC IPO.
+  effective date, unless it stopped reporting in between (the went-dark
+  case).
+- censoring_right: BEFORE 2015 exactly where the effective date is
+  before 2015-01-01, and every company the censoring shortcut covers is
+  BEFORE 2015.
+- type_fits: ipo and spac follow column 2; a row with a despac_date has
+  spac = 1 (unless censored); a reverse merger row has a
+  reverse_merger_date.
 - spac_evidence: spac = 1 has a SIC code of 6770 or "blank check"
   language in the original IPO filing.
 IPO
@@ -261,39 +353,47 @@ IPO
   effective date.
 - final_not_preliminary: the offer price is a single number, not a
   range.
+- no_market_before: every IPO from 2015 on has the sentence saying
+  there was no public market before the offering.
 EGC
 - egc_window: the filing behind column 7 is dated within 10 days of the
   effective date.
 - egc_quote_fits: every sentence-based EGC quote contains "emerging
   growth company".
-- checkbox_era: every EGC self-report from a filing dated on or after
-  2017-04-12 comes from its checkbox.
+- checkbox_era: every EGC self-report from a registration statement,
+  10-Q, 10-K or 8-K filed on or after 2017-04-12 comes from its
+  checkbox.
 - supplement_rule: column 8 equals column 7 wherever 7 is 1 or 0, and
   column 10 equals column 9 wherever 9 is 1 or 0. Revenue-filled cells
   have the revenue, fiscal year end and limit recorded, and the 1 or 0
   matches them.
-- first_report_is_first: the filing behind column 9 is the first 10-Q
-  or 10-K filed after the effective date.
-- egc_needs_new_equity: an EGC = 1 company had no registered sale of
-  common stock before 2011-12-08.
-- egc_changes_explained: where column 7 is 1 and column 9 is 0, the
-  reason is recorded.
+- first_report_is_first: the filing behind column 9 is the first 10-Q,
+  10-K or 10-KT filed after the effective date.
+- egc_needs_new_equity: no company with an EGC answer of 1 has, in the
+  index, an equity registration statement or 424B prospectus filed
+  before 2011-12-08 (a company that sold registered common stock before
+  then can't be an EGC). Check this from the index; send only flagged
+  rows to the models.
+- egc_changes_explained: where column 7 is 1 and column 9 is 0,
+  egc_change_reason and its evidence are recorded. Column 7 = 0 with
+  column 9 = 1 is flagged for review, since a company can't become an
+  EGC after it has stopped being one.
 - egc_matches_xbrl: every EGC self-report from a 10-K or 10-Q agrees
   with the filing's own inline-XBRL tag
   dei:EntityEmergingGrowthCompany, where the filing has one.
-- revenue_matches_xbrl: every revenue figure equals the company's own
-  XBRL value for the same period, where one exists.
+- revenue_matches_xbrl: every revenue figure is within 1% of the
+  company's own XBRL total revenue for the same period, where one
+  exists (the total revenue tag the filing itself uses).
 10-K run
-- run_unbroken: the recorded fiscal year ends run one year apart (or
-  are bridged by a 10-KT) up to the 2025 annual report, all original
-  10-Ks.
+- run_unbroken: the recorded fiscal year ends are 11 to 13 months
+  apart (or bridged by a 10-KT) up to the 2025 annual report.
 - run_starts_after_gap: the 10-K before the run's first one (if any)
   is more than one fiscal year earlier.
 After becoming public
 - events_after_effective: despac_date and reverse_merger_date are after
   the effective date (or on or after 2015-01-01 for censored rows).
-- despac_has_closing: every despac_date matches the closing 8-K (Item
-  2.01) and the merger partner's name is recorded.
+- despac_has_closing: every despac_date equals the event date of the
+  closing 8-K (Item 2.01), and the merger partner's name is recorded.
 - after_event_order: the EGC filing and revenue period behind columns
   13-16 and 18-21 are the first ones after the event.
 
@@ -302,7 +402,10 @@ Email me both files as attachments: the final file (the one I'll use)
 and the working file (the evidence behind it).
 
 The email body is a plain-English report organized under these
-questions, with counts and short tables:
+questions, with counts and short tables. Keep it readable: for
+questions 10 and 11, summarize by check and by kind of decision, with
+counts and one or two examples each; the full lists are in the working
+file.
 1. How many companies are in the file, and how many were researched
    (10-K and 10-KT filers that are not asset-backed)?
 2. How many became subject to reporting before 2015, and how many in
@@ -320,9 +423,11 @@ questions, with counts and short tables:
 8. Reverse mergers: the same questions.
 9. How long are the companies' current unbroken runs of 10-Ks, and how
    many had a break?
-10. Did every check pass? List each remaining exception and why it's
-    real. How did the bedrock-map runs score against the answer key,
-    and what did they cost?
-11. Which rows needed a judgement call, and how was each decided?
-12. What did you reuse from the earlier project, and how many of its
-    values changed under this prompt's definitions?
+10. Did every check pass? Summarize the remaining exceptions and the
+    UNRESOLVED rows. How did the bedrock-map runs score against the
+    answer key, and what did they cost?
+11. Which kinds of rows needed a judgement call, and how was each kind
+    decided?
+12. What did you reuse from the earlier project? For companies in both,
+    how many ipo values and EGC-at-IPO values (the earlier egc_at_ipo
+    against this project's egc_at_effective_self) differ, and why?
