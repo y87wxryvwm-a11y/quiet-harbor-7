@@ -26,10 +26,12 @@ You will build two files:
   research.
 
 WHICH ROWS TO RESEARCH
-Research a row only if column "form" is 10-K or 10-K/A AND column ABS
-does not mark it as asset-backed. List ABS's distinct values in the
-report and say which you treated as asset-backed. Put EXCLUDED in every
-new column for all other rows.
+Research a row only if column "form" is 10-K, 10-K/A, 10-KT or 10-KT/A
+AND column ABS does not mark it as asset-backed. (10-KT is the
+transition report a company files when it changes its fiscal year;
+transition filers are included.) List the distinct values of "form" and
+ABS in the report, with counts, and say which you treated as in scope.
+Put EXCLUDED in every new column for all other rows.
 
 Use only SEC EDGAR filings as sources (your S3 copy of EDGAR counts).
 Every link you deliver points to sec.gov.
@@ -302,7 +304,7 @@ and the working file (the evidence behind it).
 The email body is a plain-English report organized under these
 questions, with counts and short tables:
 1. How many companies are in the file, and how many were researched
-   (10-K filers that are not asset-backed)?
+   (10-K and 10-KT filers that are not asset-backed)?
 2. How many became subject to reporting before 2015, and how many in
    each year from 2015 on?
 3. How did the 2015-on companies become public, by type? How many
