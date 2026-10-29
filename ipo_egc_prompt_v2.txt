@@ -1,11 +1,14 @@
-This is a new project. This prompt is its complete specification:
-follow it exactly.
+This is a new project. This prompt defines what to deliver: follow its
+definitions, output files and checks exactly. How you get there is your
+call.
 
 EARLIER WORK
-This machine has the finished scripts, cached filings and outputs of an
-earlier, narrower IPO and EGC project. Use them only as an on-ramp: reuse
-code, cached filings and findings where they save time, but nothing
-carries over on trust. Every value in this project's output must meet
+This machine has the work of two earlier runs: ipo-egc-2025 (a
+narrower IPO and EGC project that finished) and going-public-egc-2025
+(an aborted first attempt at this one). Use them only as an on-ramp:
+reuse code and findings where they save time, but nothing carries over
+on trust. Before you start, stop any job still running from those runs
+and delete their local copies of filings. Every value in this project's output must meet
 the definitions below and pass the checks below, wherever it came from.
 Where the earlier work defined something differently (for example, its
 IPO date was the IPO registration's effective date, not the date the
@@ -44,55 +47,48 @@ Use only SEC EDGAR filings as sources (your S3 copy of EDGAR counts).
 Every link you deliver points to sec.gov.
 
 HOW TO WORK
-The earlier project worked entirely in code. It fetched filings in code,
-ran, found surprises, fetched again and reran, many times over, and it
-took far too long. This time, use your edgar-toolkit (~/projects/edgar-toolkit/)
-and Bedrock for the reading, and use code for building and checking.
-Code alone answers anything the index holds: filing dates, forms, file
-numbers, EFFECT notices, 424B filings, SIC codes, the 10-K run and
-censoring. Use the models only for reading filing text.
-1. Find filings with edgar-index, not by crawling EDGAR. Get each
-   company's filing history (forms, dates, file numbers) from it in one
-   pass.
-2. Fetch each filing once with edgar-fetch, and keep what you fetch
-   (regex windows, inline-XBRL facts with --ix) in a local cache that
-   every later step reads. Its ☒/☐ checkbox conversion is how you read
-   EGC checkboxes.
-3. Investigate before coding. Before writing the rules for a field, use
-   bedrock-ask on a small, varied set of real companies: about three of
-   each type (traditional IPO, SPAC, de-SPAC including one with a new
-   CIK, reverse merger including one with a new CIK, successor issuer,
-   spin-off, direct listing, uplisting, Reg A, debt-only issuer, a
-   company that went dark and came back), 30 to 40 in all. Record each
-   answer as CIK, field, value, accession and exact quote, plus the edge
-   cases seen. Turn those into code rules, and keep the companies as an
-   answer key (gold labels) with their expected values.
-4. Extract in bulk with bedrock-map. Give it a JSON schema per field and
-   only the passages it needs. Run --dry-run first and set --max-cost
-   from it. Use --escalate sonnet --escalate-when confidence=low. Score
-   against the answer key with --gold before every full run. Run the
-   full population only when every answer-key item agrees, or each
-   disagreement is settled by fixing the rule or correcting the label,
-   with the reason in edge_cases.csv. If a field still misses after
-   three rounds of changes, stop tuning it: send its hard cases to
-   bedrock-ask with Sonnet and record the pattern. Every quote must pass
-   quote_ok.
-5. Test changes on known cases first. Run a new or changed rule on the
-   answer key and the companies it affects. Run the full population only
-   when those pass. bedrock-map's cache means reruns don't pay twice.
-6. Send leftovers to the models, not to more code loops. Rows the code
-   can't settle (failed checks, unclear type) go to bedrock-map or
-   bedrock-ask in batches with the relevant passages. When several
-   leftovers share a pattern, make it a code rule. A row that a
-   whole-filing Sonnet read with bedrock-ask still can't settle is
-   unresolved: record it as the CHECKS section says and move on.
-7. Keep a growing edge-case file (edge_cases.csv: CIK, field, issue,
-   decision, accession, quote). The checks read it, so decisions stay
-   fixed when you rebuild.
-8. Run long jobs with bg-run. Check the AWS sign-in first; if it has
-   expired, stop and ask me to sign in again.
-9. If a step takes more than about 10 minutes, find out why before
-   running it again.
+Choose your own methods and tools; you know this machine and its
+toolkit better than this prompt does. Nothing here is a required
+method. If an approach isn't working, change it. Don't keep at it
+because this prompt seemed to point that way. Only the definitions,
+the output files and the checks are fixed.
+
+Limits
+- This machine's own instructions (copilot-instructions.md) win over
+  anything here about methods. Among other things, they forbid local
+  copies of EDGAR filings and bulk files.
+- The last run found only about 2.5 GB of memory safely free. Run one
+  heavy job at a time, size it to that, and try a small slice before
+  any full run.
+- If the AWS sign-in has expired, stop and ask me to sign in again.
+
+What the two earlier runs taught
+- The finished run took about 5 hours. It worked in hundreds of small
+  steps, wrote hundreds of one-off regexes patched company by company,
+  downloaded the same filings six times, and printed so much output
+  that its context had to be compacted 15 times.
+- The aborted run crashed the machine twice: it cached 11,500 filings
+  with 48 threads, then ran two heavy jobs at once. It also spent over
+  an hour tracing merger chains back to the 1990s for companies the
+  censoring rule already settles.
+So:
+- Take structured facts (filing index, EFFECT notices, XBRL) from
+  structured data. Read prose with the Bedrock models in batches,
+  rather than writing a regex and patching it one failure at a time.
+- Get the text you need from each filing in one pass per question.
+- Keep your own context small: scripts write results to files and
+  print only counts and a few examples.
+- Settle cheap, decisive facts first (scope, censoring), so later work
+  covers only the rows that need it. Collect a value only where the
+  output needs it (for example, revenue only where a column or check
+  uses it).
+- Before each bulk job, write a short plan in the progress log: what it
+  does, how many rows, and the expected time and memory.
+- When a step fails or runs much longer than you expected, find out why
+  before running it again. If the approach is the cause, change it.
+- Keep your decisions on unusual cases in edge_cases.csv (CIK, field,
+  issue, decision, accession, quote), so they stay fixed when you
+  rebuild.
 
 DEFINITIONS
 - Lineage: the chain of reporting entities behind a row's CIK. It
@@ -130,9 +126,11 @@ DEFINITIONS
 - Censoring: if the effective date is before 2015-01-01, record BEFORE
   2015 and don't pin down the exact date. Shortcut: a company that filed
   a 10-K or 10-Q before 2015-01-01 and has not stopped reporting since
-  is censored; its date needs no further research. For every other
-  company, find the date; if it turns out to be before 2015-01-01,
-  record BEFORE 2015.
+  is censored; its date needs no further research. The same applies to
+  lineage: once an entity in the chain was reporting before 2015-01-01
+  and hasn't stopped since, the row is censored; don't trace further
+  back. For every other company, find the date; if it turns out to be
+  before 2015-01-01, record BEFORE 2015.
 - Going-public types (column 2). Use the first one that fits:
   1. resumed reporting: went dark and came back, as defined above.
   2. SPAC IPO: the first entity in the lineage to become subject to
@@ -297,8 +295,8 @@ Sheet "edge_cases": the contents of edge_cases.csv.
 
 CHECKS
 Run them in code. Fix rows and rerun until every failure left is a real
-exception, explained in check_explanation. A row that a whole-filing
-Sonnet read still can't settle may be marked UNRESOLVED. If more than 1%
+exception, explained in check_explanation. A row you still can't settle
+after reading its filings may be marked UNRESOLVED. If more than 1%
 of researched rows fail the same check, treat it as a rule problem: fix
 the rule rather than explaining rows one by one.
 Structure
@@ -318,7 +316,8 @@ Structure
   CIK, keep the rows and list them in the report.
 Sources
 - quotes_verbatim: every quote is found word for word in the filing
-  its accession points to (after quote_ok's text clean-up).
+  its accession points to (ignoring differences in spacing and
+  checkbox symbols).
 - links_work: every URL returns HTTP 200 from sec.gov and opens the
   document itself, and the URL's accession equals the recorded one.
   Send a User-Agent and at most 10 requests per second. If sec.gov
@@ -372,8 +371,7 @@ EGC
 - egc_needs_new_equity: no company with an EGC answer of 1 has, in the
   index, an equity registration statement or 424B prospectus filed
   before 2011-12-08 (a company that sold registered common stock before
-  then can't be an EGC). Check this from the index; send only flagged
-  rows to the models.
+  then can't be an EGC).
 - egc_changes_explained: where column 7 is 1 and column 9 is 0,
   egc_change_reason and its evidence are recorded. Column 7 = 0 with
   column 9 = 1 is flagged for review, since a company can't become an
@@ -424,10 +422,12 @@ file.
 9. How long are the companies' current unbroken runs of 10-Ks, and how
    many had a break?
 10. Did every check pass? Summarize the remaining exceptions and the
-    UNRESOLVED rows. How did the bedrock-map runs score against the
-    answer key, and what did they cost?
+    UNRESOLVED rows.
 11. Which kinds of rows needed a judgement call, and how was each kind
     decided?
-12. What did you reuse from the earlier project? For companies in both,
-    how many ipo values and EGC-at-IPO values (the earlier egc_at_ipo
-    against this project's egc_at_effective_self) differ, and why?
+12. What did you reuse from the earlier runs? For companies in both
+    this file and the finished run's output, how many ipo values and
+    EGC-at-IPO values (the earlier egc_at_ipo against this project's
+    egc_at_effective_self) differ, and why?
+13. How long did the run take, which steps took the most time, and
+    what would have made it faster?
