@@ -22,37 +22,47 @@ does not mark it as asset-backed. List ABS's distinct values in the
 report and say which you treated as asset-backed. Put EXCLUDED in every
 new column for all other rows.
 
-Use only SEC EDGAR filings as sources.
+Use only SEC EDGAR filings as sources (your S3 copy of EDGAR counts).
+Every link you deliver points to sec.gov.
 
 HOW TO WORK
 The last run worked entirely in code. It fetched filings in code, ran,
 found surprises, fetched again and reran, many times over, and it took
-far too long. This time, use Amazon Bedrock agents for the
-investigative work, and use code for building and checking.
-1. Download once. Fetch each company's EDGAR filing history and each
-   filing you need once, into a local cache. Every later step reads the
-   cache. Nothing already cached is downloaded again.
-2. Investigate before coding. Before writing the rules for a field,
-   send Bedrock agents to read a small, varied set of real companies:
-   a few of each type (traditional IPO, SPAC, de-SPAC, reverse merger,
-   spin-off, uplisting, debt-only issuer, a company that went dark and
-   came back). Each agent returns structured records (CIK, field,
-   value, accession, exact quote) and a list of the edge cases it saw.
-   Turn those into code rules, and keep the companies as test cases
-   with their expected values.
-3. Test on known cases first. Run each new or changed rule on its test
-   cases and the companies it affects. Run the full population only
-   when those pass.
-4. Send leftovers to agents, not to more code loops. Rows the code
-   can't settle (failed checks, unclear type) go to Bedrock agents in
-   batches, with the relevant filing passages. Answers come back
-   structured, with a quote; code then checks each quote is really in
-   the filing. When several leftovers share a pattern, make it a code
-   rule.
-5. Keep a growing edge-case file (edge_cases.csv: CIK, field, issue,
+far too long. This time, use your edgar-toolkit (~/projects/edgar-toolkit/)
+and Bedrock for the reading, and use code for building and checking.
+1. Find filings with edgar-index, not by crawling EDGAR. Get each
+   company's filing history (forms, dates, file numbers) from it in one
+   pass.
+2. Fetch with edgar-fetch, once. Keep what you fetch (regex windows,
+   inline-XBRL facts with --ix) in a local cache that every later step
+   reads. Its ☒/☐ checkbox conversion is how you read EGC checkboxes.
+3. Investigate before coding. Before writing the rules for a field, use
+   bedrock-ask on a small, varied set of real companies: a few of each
+   type (traditional IPO, SPAC, de-SPAC including one with a new CIK,
+   reverse merger including one with a new CIK, spin-off, uplisting,
+   debt-only issuer, a company that went dark and came back). Record each
+   answer as CIK, field, value, accession and exact quote, plus the edge
+   cases seen. Turn those into code rules, and keep the companies as an
+   answer key (gold labels) with their expected values.
+4. Extract in bulk with bedrock-map. Give it a JSON schema per field and
+   only the passages it needs. Run --dry-run first and set --max-cost
+   from it. Use --escalate sonnet --escalate-when confidence=low. Score
+   against the answer key with --gold before every full run, and don't
+   run the full population until it matches the key. Every quote must
+   pass quote_ok.
+5. Test changes on known cases first. Run a new or changed rule on the
+   answer key and the companies it affects. Run the full population only
+   when those pass. bedrock-map's cache means reruns don't pay twice.
+6. Send leftovers to the models, not to more code loops. Rows the code
+   can't settle (failed checks, unclear type) go to bedrock-map or
+   bedrock-ask in batches with the relevant passages. When several
+   leftovers share a pattern, make it a code rule.
+7. Keep a growing edge-case file (edge_cases.csv: CIK, field, issue,
    decision, accession, quote). The checks read it, so decisions stay
    fixed when you rebuild.
-6. If a step takes more than about 10 minutes, find out why before
+8. Run long jobs with bg-run. Check the AWS sign-in first; if it has
+   expired, stop and ask me to sign in again.
+9. If a step takes more than about 10 minutes, find out why before
    running it again.
 
 DEFINITIONS
@@ -62,10 +72,11 @@ DEFINITIONS
   - Traditional IPO: the IPO registration statement's effective date
     (the SEC's EFFECT notice).
   - SPAC, and any company that came out of a de-SPAC: the effective
-    date of the original SPAC's IPO, even if the registrant's CIK
-    changed through a new holding company.
+    date of the original SPAC's IPO, including where a new entity (new
+    CIK) was created at the merger.
   - Reverse merger: the date the public company that acquired it
-    became subject to reporting.
+    became subject to reporting, including where a new entity (new CIK)
+    was created at the merger.
   - Uplisting: the first date the company became subject to SEC
     reporting, not the date it listed on a national exchange.
   - Spin-off: the effective date of the spun-off company's own
@@ -118,7 +129,8 @@ Becoming public
    company that came out of a de-SPAC is SPAC IPO.
 3. ipo: 1 if going_public_type is traditional IPO or SPAC IPO, else 0.
 4. spac: 1 if the first entity that became subject to reporting was a
-   SPAC, whether it is still a SPAC or has since merged.
+   SPAC, whether it is still a SPAC or has since merged, including where
+   a new entity (new CIK) was created at the merger.
 5. final_prospectus_url: direct link to the IPO's final prospectus
    document on sec.gov (the first 424B filing under the IPO
    registration's file number on or after the effective date). NONE if
@@ -176,7 +188,8 @@ one:
   revenue, and the limit applied.
 - For the effective date, also: the filing that made the company
   subject to reporting (form, file number, accession) and, for
-  de-SPACs and reverse mergers, the CIK of the original public entity.
+  de-SPACs and reverse mergers, the CIK of the original public entity
+  and whether a new CIK was created at the merger.
 - For the 10-K run: the list of fiscal year ends in the run, and the
   accession of the 10-K before the gap (if any).
 - For IPOs from 2015 on: the registration form and file number, offer
@@ -214,6 +227,9 @@ Sources
   document itself, and the URL's accession equals the recorded one.
 - same_company: every cited filing is filed by the row's CIK, or by a
   predecessor recorded in the working file.
+- lineage_linked: every row whose effective date comes from an earlier
+  entity (a SPAC, or a reverse-merger acquirer with a different CIK)
+  names that entity's CIK, and the merger filing links the two.
 Effective date
 - effective_has_evidence: every effective date has the filing that made
   the company subject to reporting, and that filing's form fits the
@@ -251,6 +267,9 @@ EGC
   common stock before 2011-12-08.
 - egc_changes_explained: where column 7 is 1 and column 9 is 0, the
   reason is recorded.
+- egc_matches_xbrl: every EGC self-report from a 10-K or 10-Q agrees
+  with the filing's own inline-XBRL tag
+  dei:EntityEmergingGrowthCompany, where the filing has one.
 - revenue_matches_xbrl: every revenue figure equals the company's own
   XBRL value for the same period, where one exists.
 10-K run
@@ -291,5 +310,6 @@ questions, with counts and short tables:
 9. How long are the companies' current unbroken runs of 10-Ks, and how
    many had a break?
 10. Did every check pass? List each remaining exception and why it's
-    real.
+    real. How did the bedrock-map runs score against the answer key,
+    and what did they cost?
 11. Which rows needed a judgement call, and how was each decided?
