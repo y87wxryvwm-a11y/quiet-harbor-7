@@ -7,8 +7,7 @@ This machine has the work of two earlier runs: ipo-egc-2025 (a
 narrower IPO and EGC project that finished) and going-public-egc-2025
 (an aborted first attempt at this one). Use them only as an on-ramp:
 reuse code and findings where they save time, but nothing carries over
-on trust. Before you start, stop any job still running from those runs
-and delete their local copies of filings. Every value in this project's output must meet
+on trust. Every value in this project's output must meet
 the definitions below and pass the checks below, wherever it came from.
 Where the earlier work defined something differently (for example, its
 IPO date was the IPO registration's effective date, not the date the
@@ -82,8 +81,9 @@ So:
   covers only the rows that need it. Collect a value only where the
   output needs it (for example, revenue only where a column or check
   uses it).
-- Before each bulk job, write a short plan in the progress log: what it
-  does, how many rows, and the expected time and memory.
+- Say what you're doing as you go (what you're running, on how many
+  rows, and why) so I can follow along. This is for oversight only:
+  don't wait for my approval, just keep working.
 - When a step fails or runs much longer than you expected, find out why
   before running it again. If the approach is the cause, change it.
 - Keep your decisions on unusual cases in edge_cases.csv (CIK, field,
@@ -429,5 +429,3 @@ file.
     this file and the finished run's output, how many ipo values and
     EGC-at-IPO values (the earlier egc_at_ipo against this project's
     egc_at_effective_self) differ, and why?
-13. How long did the run take, which steps took the most time, and
-    what would have made it faster?
